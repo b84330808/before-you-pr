@@ -1,0 +1,12 @@
+{
+  "name": "before-you-pr",
+  "owner": { "name": "Wei-Lun Li", "url": "https://github.com/b84330808" },
+  "description": "Checks a GitHub issue and the repo's contribution rules before you write code or open a PR.",
+  "plugins": [
+    {
+      "name": "before-you-pr",
+      "source": "./",
+      "description": "Checks a GitHub issue and the repo's contribution rules before you write code or open a PR."
+    }
+  ]
+}

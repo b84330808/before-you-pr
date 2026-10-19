@@ -6,13 +6,15 @@ import { applyClaimWindow, checkIssue } from "./checks/issue.ts";
 import { KeywordRulesAnalyzer } from "./checks/keyword-analyzer.ts";
 import { checkMergeFriendliness } from "./checks/merge.ts";
 import { applyComplianceSignals, fetchRuleSources } from "./checks/rules.ts";
-import { formatReport } from "./format.ts";
+import { ruleExcerpts } from "./checks/excerpts.ts";
+import { formatAgentFacts, formatReport } from "./format.ts";
 import { createDefaultClient, type GitHubClient } from "./github/client.ts";
 import { parseTarget } from "./util.ts";
 import { NAME, VERSION } from "./version.ts";
 
 const INSTRUCTIONS = `before-you-pr checks a GitHub repo's contribution rules and an issue's status before any code is written.
 Call before_you_pr before you start work on an issue, and again right before a PR is opened.
+Its verdict on the repo's written rules comes from keyword matching and can be wrong: read the rule excerpts it returns and judge them yourself, as its instructions describe.
 Follow the verdict: "dont" means do not open a PR (review the existing one or pick another issue); "comment-first" means the human should comment on the issue and wait for a maintainer.
 Never sign a CLA, add a DCO sign-off, or open a PR on the user's behalf when the repo requires a human to do it.`;
 
@@ -48,9 +50,11 @@ export function createMcpServer(getClient: () => Promise<GitHubClient>, options:
     },
     async ({ repo, issue, uses_ai }) => {
       const target = parseTarget(repo);
-      const report = await beforeYouPr({ repo: target.repo, issue: issue ?? target.issue, usesAI: uses_ai, client: await getClient(), now: now() });
+      const report = await beforeYouPr({ repo: target.repo, issue: issue ?? target.issue, usesAI: uses_ai, client: await getClient(), now: now(), agent: true });
       return {
-        content: [{ type: "text" as const, text: formatReport(report) }],
+        content: [{ type: "text" as const, text: `${formatReport(report)}
+
+${formatAgentFacts(report.agent!)}` }],
         structuredContent: report as unknown as Record<string, unknown>,
       };
     },
@@ -60,7 +64,8 @@ export function createMcpServer(getClient: () => Promise<GitHubClient>, options:
     "check_repo_rules",
     {
       title: "Repo contribution rules",
-      description: "AI-contribution policy, CLA/DCO, assignment and issue-first rules, with the quoted sentences they come from (CONTRIBUTING, AGENTS.md, CLAUDE.md, PR templates).",
+      description:
+        "Passages about AI use, assignment and claims, CLA/DCO and disclosure from the repo's CONTRIBUTING, AI-policy, AGENTS.md, CLAUDE.md and PR template files, with line numbers, plus keyword-based hints. Read the passages to decide the rules.",
       inputSchema: { repo: repoArg },
       annotations: READ_ONLY,
     },
@@ -69,7 +74,11 @@ export function createMcpServer(getClient: () => Promise<GitHubClient>, options:
       const { repo: ref } = parseTarget(repo);
       const [sources, merge] = await Promise.all([fetchRuleSources(client, ref), checkMergeFriendliness(client, ref, { now: now() }).catch(() => null)]);
       const rules = await new KeywordRulesAnalyzer().analyze(sources.docs, ref);
-      return json(applyComplianceSignals(rules, sources, merge?.checkNames ?? []));
+      return json({
+        excerpts: ruleExcerpts(sources.docs),
+        keywordHints: applyComplianceSignals(rules, sources, merge?.checkNames ?? []),
+        note: "keywordHints come from keyword matching and can be wrong; judge the excerpts yourself.",
+      });
     },
   );
 

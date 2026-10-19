@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { beforeYouPr } from "./check.ts";
-import { formatReport } from "./format.ts";
+import { agentView, formatReport } from "./format.ts";
 import { createDefaultClient } from "./github/client.ts";
 import type { Verdict } from "./types.ts";
 import { parseTarget } from "./util.ts";
@@ -17,6 +17,7 @@ Usage:
 
 Options:
   --json             print the full report as JSON
+  --agent            JSON for an AI agent: adds a facts-only verdict and rule excerpts to judge
   --no-ai            you write the change and the PR text without AI tools
   --claim-days <n>   days of inactivity after which a claim expires (default: repo rule, else 15)
   --window <n>       days of merged PRs to sample (default: 90)
@@ -25,15 +26,20 @@ Options:
   -h, --help         show this help
   -v, --version      show the version
 
-Exit codes: 0 go, 2 comment first, 3 don't, 1 error.
+Exit codes: 0 go, 2 comment first, 3 don't, 1 error (with --agent: 0 unless there is an error).
 Auth: GITHUB_TOKEN or GH_TOKEN, else \`gh auth token\`.`;
 
 const EXIT: Record<Verdict, number> = { go: 0, "comment-first": 2, dont: 3 };
 
 async function main(argv: string[]): Promise<number> {
   if (argv[0] === "mcp") {
-    const { startMcpServer } = await import("./mcp.ts");
-    await startMcpServer();
+    let mcp: typeof import("./mcp.ts");
+    try {
+      mcp = await import("./mcp.ts");
+    } catch {
+      throw new Error("This build has no MCP server (the skill bundle leaves it out). Use `npx before-you-pr mcp`.");
+    }
+    await mcp.startMcpServer();
     return -1;
   }
   const { values, positionals } = parseArgs({
@@ -41,6 +47,7 @@ async function main(argv: string[]): Promise<number> {
     allowPositionals: true,
     options: {
       json: { type: "boolean" },
+      agent: { type: "boolean" },
       "no-ai": { type: "boolean" },
       "claim-days": { type: "string" },
       window: { type: "string" },
@@ -79,10 +86,13 @@ async function main(argv: string[]): Promise<number> {
     client,
     claimWindowDays: number("claim-days", values["claim-days"]),
     windowDays: number("window", values.window),
+    agent: values.agent,
   });
-  if (values.json) console.log(JSON.stringify(report, null, 2));
+  if (values.agent) console.log(JSON.stringify(agentView(report), null, 2));
+  else if (values.json) console.log(JSON.stringify(report, null, 2));
   else console.log(formatReport(report, { color: !values["no-color"] && !process.env.NO_COLOR && process.stdout.isTTY }));
-  return EXIT[report.verdict];
+  // An agent reads the verdict from the JSON; a non-zero exit would look like a failure to it.
+  return values.agent ? 0 : EXIT[report.verdict];
 }
 
 main(process.argv.slice(2)).then(

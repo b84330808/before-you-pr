@@ -1,9 +1,10 @@
+import { ruleExcerpts } from "./checks/excerpts.ts";
 import { applyClaimWindow, checkIssue, IssueNotFoundError } from "./checks/issue.ts";
 import { KeywordRulesAnalyzer } from "./checks/keyword-analyzer.ts";
 import { checkMergeFriendliness, checkViewer } from "./checks/merge.ts";
 import { applyComplianceSignals, fetchRuleSources, RepoNotFoundError } from "./checks/rules.ts";
 import { createDefaultClient, GitHubError, type GitHubClient } from "./github/client.ts";
-import type { IssueStatus, RepoRef, Report, RepoRules, RulesAnalyzer } from "./types.ts";
+import type { AgentFacts, IssueStatus, RepoRef, Report, RepoRules, RulesAnalyzer } from "./types.ts";
 import { parseTarget, repoSlug } from "./util.ts";
 import { decide } from "./verdict.ts";
 import { NAME, VERSION } from "./version.ts";
@@ -23,7 +24,17 @@ export interface CheckOptions {
   windowDays?: number;
   /** Look up the current user's open PRs and recent pace. Defaults to true. */
   viewer?: boolean;
+  /** Add `agent`: a verdict from GitHub data alone plus rule excerpts for an AI agent to judge. */
+  agent?: boolean;
 }
+
+export const AGENT_INSTRUCTIONS = `factsVerdict comes from GitHub data only: linked PRs, claims, labels, merges, the user's own pace, and CLA/DCO bots.
+The repo's written rules are not judged in it. Read every excerpt and decide, quoting file:line:
+1. the AI policy: forbidden, PR text must be human-written, disclosure required, allowed, or not stated; and whether agents may open PRs on their own;
+2. whether an issue must be assigned or claimed, or a change discussed, before a PR;
+3. whether a CLA or DCO sign-off is required.
+The final verdict is the stricter of factsVerdict and what the rules imply: a ban on AI-assisted contributions means dont; an assign-first or discuss-first rule the user has not met means at least comment-first.
+"rules" holds keyword hints that can be wrong; the excerpts win. If they look incomplete, read the files at their URLs.`;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const fatal = (e: unknown) => e instanceof RepoNotFoundError || e instanceof IssueNotFoundError || (e instanceof GitHubError && e.kind !== "api");
@@ -69,16 +80,29 @@ export async function beforeYouPr(options: CheckOptions): Promise<Report> {
   if (issueResult && options.claimWindowDays === undefined && rules?.claimWindow) issueResult = applyClaimWindow(issueResult, rules.claimWindow.days);
   const viewerResult = settled(viewer, "your recent PRs");
 
-  const { verdict, reasons, nextSteps } = decide({
+  const base = {
     usesAI,
-    rules,
     issue: issueResult,
     merge: mergeResult,
     viewer: viewerResult,
     viewerLogin: viewerResult?.login ?? issueChecked?.viewer ?? null,
     errors,
     issueRequested: issueNumber !== null,
-  });
+  };
+  const { verdict, reasons, nextSteps } = decide({ ...base, rules });
+
+  let agent: AgentFacts | undefined;
+  if (options.agent) {
+    // Same decision without anything read from prose; CLA/DCO bots and config files still count.
+    const structuredOnly = src ? applyComplianceSignals(new KeywordRulesAnalyzer().analyze([], repo), src, mergeResult?.checkNames ?? []) : null;
+    const facts = decide({ ...base, rules: structuredOnly });
+    agent = {
+      factsVerdict: facts.verdict,
+      factsReasons: facts.reasons.filter((r) => r.code !== "ai-policy-unknown"),
+      excerpts: src ? ruleExcerpts(src.docs) : [],
+      instructions: AGENT_INSTRUCTIONS,
+    };
+  }
 
   return {
     tool: { name: NAME, version: VERSION },
@@ -94,5 +118,6 @@ export async function beforeYouPr(options: CheckOptions): Promise<Report> {
     merge: mergeResult,
     viewer: viewerResult,
     errors,
+    ...(agent ? { agent } : {}),
   };
 }

@@ -1,0 +1,9 @@
+{
+  "name": "before-you-pr",
+  "version": "0.1.0",
+  "description": "Checks a GitHub issue (linked PRs in any state, claims) and the repo's rules (AI policy, CLA/DCO, assign-first) before you write code or open a PR.",
+  "author": { "name": "Wei-Lun Li", "url": "https://github.com/b84330808" },
+  "repository": "https://github.com/b84330808/before-you-pr",
+  "license": "MIT",
+  "keywords": ["github", "open-source", "contributing", "pull-request", "ai-policy"]
+}

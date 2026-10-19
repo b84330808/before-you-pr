@@ -44,7 +44,8 @@
     "test": "node --test \"test/**/*.test.ts\"",
     "record": "node scripts/record-fixtures.ts",
     "start": "node src/cli.ts",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "bundle": "node scripts/bundle-skill.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
 }

@@ -2,7 +2,7 @@ import type { Evidence, RepoRef, RepoRules, RuleDocument, RulesAnalyzer } from "
 import { links, segment, type Sentence } from "./text.ts";
 
 // "AI" is matched case-sensitively so that words like "ai" in other languages or identifiers do not count.
-const AI_TERM =
+export const AI_TERM =
   /\bAI\b|\bA\.I\.|\bAIs\b|\bai[- ](?:generated|assisted|tools?)\b|\bLLMs?\b|[Ll]arge [Ll]anguage [Mm]odels?|\b[Gg]enerative\b|\bGenAI\b|\bChatGPT\b|\bCopilot\b|\bClaude\b|\bGemini\b|\bCodex\b|[Mm]achine[- ]generated|\b[Aa]gentic\b|\b[Cc]oding agents?\b|\b[Cc]hatbots?\b|\b[Vv]ibe[- ]cod|[Nn]atural [Ll]anguage [Pp]rocessing|[Aa]rtificial [Ii]ntelligence/;
 
 const PROHIBIT =

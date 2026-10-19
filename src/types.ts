@@ -202,4 +202,28 @@ export interface Report {
   merge: MergeFriendliness | null;
   viewer: ViewerContext | null;
   errors: string[];
+  /** Present when the report was made for an AI agent to finish (`--agent`, MCP, the skill). */
+  agent?: AgentFacts;
+}
+
+/** A passage of a rule document, kept for someone to read rather than as a conclusion. */
+export interface RuleExcerpt {
+  file: string;
+  url: string;
+  kind: SourceKind;
+  /** Headings the passage sits under, joined with " > ". */
+  heading: string | null;
+  lines: { line: number; text: string }[];
+}
+
+/**
+ * The split the skill relies on: GitHub data is judged here, written rules are left to the agent.
+ * `factsVerdict` uses only structured data (PRs, claims, labels, merges, the user's pace, CLA/DCO
+ * bots and files). `excerpts` are the passages of the repo's own rules for the agent to read.
+ */
+export interface AgentFacts {
+  factsVerdict: Verdict;
+  factsReasons: Reason[];
+  excerpts: RuleExcerpt[];
+  instructions: string;
 }

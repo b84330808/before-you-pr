@@ -1,4 +1,4 @@
-import type { AiPolicy, Evidence, IssueStatus, Level, MergeFriendliness, Report, RepoRules, Verdict } from "./types.ts";
+import type { AgentFacts, AiPolicy, Evidence, IssueStatus, Level, MergeFriendliness, Report, RepoRules, Verdict } from "./types.ts";
 import { formatDuration, pct } from "./util.ts";
 
 export interface FormatOptions {
@@ -143,4 +143,47 @@ export function formatReport(report: Report, options: FormatOptions = {}): strin
   report.nextSteps.forEach((s, i) => out.push(`  ${i + 1}. ${s}`));
   if (!report.usesAI) out.push(c("dim", "  (checked as a contribution written without AI tools: --no-ai)"));
   return out.join("\n");
+}
+
+/** Plain-text version of the agent hand-off: the facts verdict, the instructions, then the excerpts. */
+export function formatAgentFacts(agent: AgentFacts): string {
+  const out: string[] = [`Facts-only verdict (GitHub data, no written rules): ${agent.factsVerdict}`];
+  for (const r of agent.factsReasons) out.push(`  [${r.level}] ${r.message}`);
+  out.push("", "Instructions:", agent.instructions, "", "Rule excerpts:");
+  if (!agent.excerpts.length) out.push("  (no contributing, AI-policy or agent instruction files found)");
+  for (const e of agent.excerpts) {
+    out.push(`--- ${e.file}${e.heading ? ` § ${e.heading}` : ""} (${e.url})`);
+    for (const l of e.lines) out.push(`L${l.line}: ${l.text}`);
+  }
+  return out.join("\n");
+}
+
+/** The compact JSON an agent gets from `--agent`: facts, rule excerpts and instructions, without the long keyword evidence. */
+export function agentView(report: Report) {
+  const { rules, merge } = report;
+  return {
+    tool: report.tool,
+    repo: report.repo,
+    issueNumber: report.issueNumber,
+    generatedAt: report.generatedAt,
+    instructions: report.agent?.instructions,
+    factsVerdict: report.agent?.factsVerdict,
+    factsReasons: report.agent?.factsReasons,
+    keywordHints: rules && {
+      verdict: report.verdict,
+      aiPolicy: rules.ai.policy,
+      noAutonomousAgents: rules.ai.noAutonomousAgents.length > 0,
+      claRequired: rules.cla.required,
+      dcoRequired: rules.dco.required,
+      assignmentRequired: rules.assignment.required,
+      claimWindowDays: rules.claimWindow?.days ?? null,
+      claDcoSignals: [...rules.cla.signals, ...rules.dco.signals],
+    },
+    sources: rules?.sources ?? [],
+    excerpts: report.agent?.excerpts ?? [],
+    issue: report.issue,
+    merge: merge && { ...merge, checkNames: undefined },
+    viewer: report.viewer,
+    errors: report.errors,
+  };
 }

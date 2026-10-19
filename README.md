@@ -1,10 +1,38 @@
 # before-you-pr
 
-**Check a repo's rules and an issue's status before you write any code.**
+**An agent skill, with a CLI and an MCP server, that checks a repo's rules and an issue's status before anyone writes code.**
 
-`before-you-pr` reads a GitHub repo's contribution rules (AI policy, CLA/DCO, assign-first rules), every PR that ever touched the issue, who has claimed it, and how often outside PRs get merged. Then it gives one cautious verdict, **go**, **comment & claim first** or **don't**, and quotes the sentence or PR behind each reason.
+Ask your coding agent "can I work on psf/black#5260?" and before-you-pr answers **go**, **comment & claim first** or **don't**, with a link or a quoted rule behind each reason.
 
-It is a CLI for people and an MCP server for coding agents. It only reads: it never opens PRs, posts comments or signs anything.
+It splits the work between code and the model, each doing what it is good at:
+
+- **Code collects and judges the facts.** A bundled script asks GitHub for:
+  - every PR that ever touched the issue (open, merged or closed), and why the closed ones were closed;
+  - who has claimed the issue, and whether they are still active;
+  - labels, and how often outside PRs get merged;
+  - your own PR pace, and CLA/DCO bots.
+
+  These are computed, not guessed.
+- **The model reads the rules.** Every repo writes its CONTRIBUTING, AI policy and AGENTS.md differently. So the script only pulls out the relevant passages, with line numbers, and the agent judges them: is AI help allowed, must the PR text be human-written, must you be assigned first, is a CLA or DCO needed.
+
+It only reads. It never opens PRs, posts comments or signs anything, and it tells the agent not to either.
+
+## Quick start
+
+**As a skill in Claude Code:**
+
+```text
+/plugin marketplace add b84330808/before-you-pr
+/plugin install before-you-pr@before-you-pr
+```
+
+Then just ask, for example: "I want to fix https://github.com/pydantic/pydantic/issues/11692. Should I start?"
+
+- The skill runs the check, reads the repo's rules and tells you what to do next. It runs again right before a PR is opened.
+- It needs Node.js 20+ and `gh auth login` (or `GITHUB_TOKEN`); there is nothing else to install.
+- To install it by hand, copy [`skills/before-you-pr/`](skills/before-you-pr/) into `~/.claude/skills/`.
+
+**From the command line**, the same check looks like this:
 
 ```console
 $ npx before-you-pr psf/black 5260
@@ -60,7 +88,7 @@ It is deliberately conservative: it will tell you to slow down far more often th
 
 ## What it checks
 
-1. **Repo rules.** These come from `CONTRIBUTING.*` (root, `.github/`, `docs/`), AI-policy files, `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, PR templates, the org's `.github` repo, and contributing guides linked from another repo of the same owner (such as `containerd/project`).
+1. **Repo rules.** The skill and the MCP server hand the passages to the agent to judge. The CLI judges them itself, with a strict keyword scan. The rules come from `CONTRIBUTING.*` (root, `.github/`, `docs/`), AI-policy files, `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, PR templates, the org's `.github` repo, and contributing guides linked from another repo of the same owner (such as `containerd/project`).
    - **AI policy:** forbidden, PR text must be human-written, disclosure required, allowed, or not stated. It also flags "no autonomous agents" rules and conditional limits.
    - **CLA / DCO:** from the docs, `.clabot` and `dco.yml` files, CLA/DCO workflows, and the status checks on recently merged PRs (for example `license/cla`).
    - **Assign-first, issue-first and claim-window rules**, and imperative rules in agent instruction files.
@@ -87,7 +115,7 @@ Each finding has a level, and the strictest one wins.
 
 Notes, such as "disclose AI use", "sign off your commits yourself" or "a claim expired, so mention it in your PR", never block, but they are listed in the next steps.
 
-## Install and use
+## Command line
 
 Requires Node.js 20 or later (developed on 24), and a GitHub token: `GITHUB_TOKEN`, `GH_TOKEN`, or a logged-in [`gh`](https://cli.github.com/). For public repos a token with no scopes is enough.
 
@@ -99,16 +127,19 @@ npx before-you-pr sphinx-doc/sphinx 4248
 npx before-you-pr https://github.com/pydantic/pydantic/issues/11692 --json
 ```
 
+The npm package is not published yet. Until it is, run the same CLI from a clone of this repo: `node skills/before-you-pr/scripts/before-you-pr.mjs sphinx-doc/sphinx 4248`.
+
 | Option | Meaning |
 |---|---|
 | `--json` | the full report as JSON (see [`src/types.ts`](src/types.ts)) |
+| `--agent` | compact JSON for an AI agent: the facts-only verdict, rule excerpts to judge, and instructions; this is what the skill uses |
 | `--no-ai` | you write the change and the PR text without AI tools, so AI rules become notes |
 | `--claim-days <n>` | the claim window in days (default: the repo's stated rule, otherwise 15) |
 | `--window <n>` | days of merged PRs to sample (default 90) |
 | `--refresh` | ignore cached responses |
 | `--no-color` | plain output |
 
-Exit codes: `0` go, `2` comment first, `3` don't, `1` error. That makes it easy to gate a script or an agent loop on the result.
+Exit codes: `0` go, `2` comment first, `3` don't, `1` error. That makes it easy to gate a script on the result. With `--agent` the exit code is `0` unless there is an error, because the verdict is in the JSON.
 
 Responses are cached on disk to save API rate limit: rules and merge statistics for 6 hours, issue state and your own PR counts for 5 minutes. The cache lives in `%LOCALAPPDATA%\before-you-pr\cache` on Windows and `~/.cache/before-you-pr` elsewhere; set `BEFORE_YOU_PR_CACHE_DIR` to change it. A full check costs five to eight GraphQL requests.
 
@@ -132,8 +163,8 @@ Claude Desktop, Cursor and other MCP clients:
 
 | Tool | What it returns |
 |---|---|
-| `before_you_pr` | the full check and verdict, as text plus `structuredContent` |
-| `check_repo_rules` | AI policy, CLA/DCO, assignment and issue-first rules, with quotes |
+| `before_you_pr` | the full check as text plus `structuredContent`, with the facts-only verdict and the rule excerpts for the agent to judge |
+| `check_repo_rules` | rule passages about AI use, assignment, CLA/DCO and disclosure, with line numbers, plus keyword hints |
 | `check_issue` | linked PRs in any state with close reasons, and claims |
 | `check_merge_friendliness` | outside-contributor share, median time to merge, closed-unmerged counts |
 
@@ -151,11 +182,28 @@ console.log(formatReport(report));
 
 ## How the rules are read, and where it can be wrong
 
-The default analyzer is deliberately simple. It splits each document into sentences, keeps track of headings (a sentence under "AI Policy" is about AI even when it does not say so), and matches keyword rules. Every finding links to the exact file and line, so you can check it in a second.
+Contribution rules are free text with no common format, so before-you-pr does not pretend to understand them with code alone.
 
-Keyword matching is easy to fool: [one survey of 703 popular repos](https://github.com/sujeito-operator/ai-contribution-policy) found that half of its keyword hits for "don't open PRs" were not about AI at all. So the analyzer is strict about strong claims. "Forbidden" needs an explicit AI term, a code or contribution subject, and no conditions such as "unless", "low-quality" or "that you cannot explain". Anything conditional is reported as a limit. Mentions of AI tools in agent instruction files do not count as policy.
+**With an agent (the skill or the MCP server):**
 
-You can swap in a better analyzer, for example one backed by an LLM, by implementing `RulesAnalyzer`:
+1. The script splits each rule file into sentences, keeping track of headings, so a sentence under "AI Policy" counts as AI policy even when it does not say so.
+2. It keeps the passages that touch AI use, assignment and claims, CLA/DCO, disclosure, automation and duplicates, with their line numbers. The filter is broad on purpose, and capped at about 16,000 characters.
+3. It hands those passages to the agent, together with a verdict built only from GitHub data (`factsVerdict`).
+4. The agent decides what the rules say, quotes `file:line`, and takes the stricter of the two verdicts.
+
+For example, Sphinx's PR template says that all interaction must be done by humans, including submitting the PR. A keyword list misses that sentence; a model reading the passage does not.
+
+**On its own (the plain CLI):** a strict keyword analyzer turns the same passages into rules, and every finding links to its file and line.
+
+Keyword matching is easy to fool: [one survey of 703 popular repos](https://github.com/sujeito-operator/ai-contribution-policy) found that half of its keyword hits for "don't open PRs" were not about AI at all. So the analyzer is strict about strong claims:
+
+- "Forbidden" needs an explicit AI term, a code or contribution subject, and no conditions such as "unless", "low-quality" or "that you cannot explain".
+- Anything conditional is reported as a limit.
+- Mentions of AI tools in agent instruction files do not count as policy.
+
+In the agent output these results appear only as `keywordHints`.
+
+You can also plug your own analyzer into the library by implementing `RulesAnalyzer`:
 
 ```ts
 import { beforeYouPr, KeywordRulesAnalyzer, type RulesAnalyzer } from "before-you-pr";
@@ -173,7 +221,7 @@ await beforeYouPr({ repo: "sphinx-doc/sphinx", analyzer });
 
 Known limits:
 
-- Only English policy text is understood.
+- The keyword analyzer only understands English. The agent path can read other languages, as long as the passage filter catches the sentence.
 - Only the first 100 comments and timeline events of an issue are read.
 - `authorAssociation` hides private org members. Anyone who merged a PR in the sample counts as an insider, but the share of outside PRs can still be a little high.
 - The unlinked-PR search only finds PRs that contain the issue number.
@@ -191,7 +239,7 @@ Known limits:
 ## Roadmap
 
 - A GitHub Action for maintainers that comments when a new PR targets an issue that already has an open PR.
-- An optional LLM analyzer, and policies in languages other than English.
+- Measure how often the excerpts contain each repo's real policy, using [open-source-ai-contribution-policies](https://github.com/melissawm/open-source-ai-contribution-policies) as the reference.
 - Reading machine-readable policies such as [ai-policy.dev](https://github.com/43081j/ai-policy) frontmatter when repos adopt them.
 
 ## Development
@@ -202,17 +250,18 @@ npm test           # node --test, replaying recorded GitHub responses (needs Nod
 npm run typecheck
 npm run build      # emits dist/
 npm run record     # re-records test/fixtures from the live API (needs a token)
+npm run bundle     # rebuilds skills/before-you-pr/scripts/before-you-pr.mjs; CI fails if it is out of date
 ```
 
 The scenario tests replay real responses recorded from psf/black, pylint, sqlfluff, Sphinx, pydantic, Vite and Cherry Studio ([`test/scenarios.ts`](test/scenarios.ts)). Recording replaces your own login and PR counts with placeholders, so fixtures do not show who recorded them.
 
 ## 日本語の概要
 
-before-you-pr は、GitHub の issue に取りかかる前に、リポジトリのルールと issue の状況を確認するツールです。確認するのは、AI 利用ポリシー、CLA/DCO、アサイン必須かどうか、状態を問わずその issue に関係する PR、誰が担当を宣言しているか（15 日ルール）、外部コントリビューターの PR がどれだけマージされているか、の六つです。そのうえで「進めてよい」「まずコメントして担当を宣言する」「やめておく」のどれかを、根拠の引用付きで返します。CLI と MCP サーバーの両方で使えます。作者は AI アシスタントを使って OSS に貢献していたところ、AgentScan に自動化アカウントの疑いを指摘されました。この経験から、重複した PR や望まれていない PR を減らすために作ったツールです。
+before-you-pr は、GitHub の issue に取りかかる前に、リポジトリのルールと issue の状況を確認するツールです。確認するのは、AI 利用ポリシー、CLA/DCO、アサイン必須かどうか、状態を問わずその issue に関係する PR、誰が担当を宣言しているか（15 日ルール）、外部コントリビューターの PR がどれだけマージされているか、の六つです。そのうえで「進めてよい」「まずコメントして担当を宣言する」「やめておく」のどれかを、根拠の引用付きで返します。GitHub のデータの集計と判定はプログラムが行い、書式がリポジトリごとに違う規約文はエージェント（LLM）が読んで判断します。Claude Code のスキルとして使えるほか、CLI と MCP サーバーも用意しています。作者は AI アシスタントを使って OSS に貢献していたところ、AgentScan に自動化アカウントの疑いを指摘されました。この経験から、重複した PR や望まれていない PR を減らすために作ったツールです。
 
 ## 中文摘要
 
-before-you-pr 會在你動手寫程式之前，先幫你檢查 GitHub repo 的貢獻規則和 issue 的狀態。檢查項目有六項：AI 貢獻政策、CLA/DCO、是否需要先被指派、與該 issue 相關的所有 PR（不分狀態）、誰認領了它以及認領是否仍有效（15 天規則），還有外部貢獻者的 PR 有多少被合併。最後它會給出「可以做」、「先留言認領」或「不要做」三者之一，並附上每個理由的原文出處。它同時提供 CLI 和 MCP server。作者在用 AI 助手參與開源時，帳號被 AgentScan 標記為疑似自動化。這個工具就是為了負責任地貢獻、減少重複和不受歡迎的 PR 而做的。
+before-you-pr 會在你動手寫程式之前，先幫你檢查 GitHub repo 的貢獻規則和 issue 的狀態。檢查項目有六項：AI 貢獻政策、CLA/DCO、是否需要先被指派、與該 issue 相關的所有 PR（不分狀態）、誰認領了它以及認領是否仍有效（15 天規則），還有外部貢獻者的 PR 有多少被合併。最後它會給出「可以做」、「先留言認領」或「不要做」三者之一，並附上每個理由的原文出處。GitHub 資料的查詢和判斷由程式負責；每個 repo 寫法都不同的規則文字，則交給 agent（LLM）閱讀判斷。它主要是 Claude Code 的 skill，也提供 CLI 和 MCP server。作者在用 AI 助手參與開源時，帳號被 AgentScan 標記為疑似自動化。這個工具就是為了負責任地貢獻、減少重複和不受歡迎的 PR 而做的。
 
 ---
 
