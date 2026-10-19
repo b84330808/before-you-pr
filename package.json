@@ -1,0 +1,57 @@
+{
+  "name": "before-you-pr",
+  "version": "0.1.0",
+  "description": "Check a repo's contribution rules and an issue's status before you write code: AI policy, CLA/DCO, claims, existing PRs, and a conservative go / comment first / don't verdict. CLI and MCP server.",
+  "keywords": [
+    "github",
+    "open-source",
+    "contributing",
+    "pull-request",
+    "ai-policy",
+    "mcp",
+    "mcp-server",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Wei-Lun Li (https://github.com/b84330808)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b84330808/before-you-pr.git"
+  },
+  "type": "module",
+  "bin": {
+    "before-you-pr": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "record": "node scripts/record-fixtures.ts",
+    "start": "node src/cli.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}
