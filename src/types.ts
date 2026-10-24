@@ -163,6 +163,10 @@ export interface MergeFriendliness {
   windowDays: number;
   stars: number;
   archived: boolean;
+  /** "collaborators-only" when the repo lets only collaborators open pull requests. */
+  prCreationPolicy: "all" | "collaborators-only";
+  /** The current user's permission here, such as READ or WRITE; null when GitHub does not say. */
+  viewerPermission: string | null;
   pushedAt: string | null;
   merged: { total: number; external: number };
   externalShare: number | null;

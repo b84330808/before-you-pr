@@ -5,6 +5,8 @@ import { formatDuration, pct } from "./util.ts";
 export const STALE_PR_DAYS = 60;
 const MANY_OPEN_PRS_IN_REPO = 3;
 const MANY_PRS_PER_DAY = 5;
+/** Permissions that make the user a collaborator who can still open PRs where only collaborators may. */
+const COLLABORATOR_PERMISSIONS = new Set(["ADMIN", "MAINTAIN", "WRITE", "TRIAGE"]);
 
 export interface VerdictInput {
   usesAI: boolean;
@@ -27,6 +29,9 @@ const ago = (days: number) => (days === 0 ? "today" : days === 1 ? "1 day ago" :
 function repoReasons(input: VerdictInput, out: Reason[]) {
   const { rules, merge, viewer, usesAI } = input;
   if (merge?.archived) out.push({ level: "stop", code: "repo-archived", message: "The repository is archived; it does not accept changes." });
+  if (merge?.prCreationPolicy === "collaborators-only" && !COLLABORATOR_PERMISSIONS.has(merge.viewerPermission ?? "")) {
+    out.push({ level: "stop", code: "prs-collaborators-only", message: "Only collaborators can open pull requests in this repository, so GitHub will refuse a PR from you." });
+  }
 
   if (rules) {
     const ai = rules.ai;
@@ -250,7 +255,8 @@ function nextSteps(verdict: Verdict, input: VerdictInput, reasons: Reason[]): st
   const steps: string[] = [];
   const codes = new Set(reasons.map((r) => r.code));
   if (verdict === "dont") {
-    if (codes.has("open-pr") || codes.has("your-open-pr")) steps.push("Review, test or comment on the existing PR instead of opening another one.");
+    if (codes.has("prs-collaborators-only")) steps.push("Open an issue with the details and your suggested fix instead of a PR.");
+    else if (codes.has("open-pr") || codes.has("your-open-pr")) steps.push("Review, test or comment on the existing PR instead of opening another one.");
     else if (codes.has("claimed") || codes.has("assigned")) steps.push("Leave this issue to the person working on it, or offer help in a comment. Pick another issue.");
     else steps.push("Do not open a PR for this. Pick another issue or another project.");
   } else if (verdict === "comment-first") {

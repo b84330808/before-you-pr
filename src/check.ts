@@ -28,7 +28,7 @@ export interface CheckOptions {
   agent?: boolean;
 }
 
-export const AGENT_INSTRUCTIONS = `factsVerdict comes from GitHub data only: linked PRs, claims, labels, merges, the user's own pace, and CLA/DCO bots.
+export const AGENT_INSTRUCTIONS = `factsVerdict comes from GitHub data only: linked PRs, claims, labels, merges, whether only collaborators can open PRs, the user's own pace, and CLA/DCO bots.
 The repo's written rules are not judged in it. Read every excerpt and decide, quoting file:line:
 1. the AI policy: forbidden, PR text must be human-written, disclosure required, allowed, or not stated; and whether agents may open PRs on their own;
 2. whether an issue must be assigned or claimed, or a change discussed, before a PR;

@@ -77,6 +77,8 @@ const merge = (over: Partial<MergeFriendliness> = {}): MergeFriendliness => ({
   windowDays: 90,
   stars: 1000,
   archived: false,
+  prCreationPolicy: "all",
+  viewerPermission: "READ",
   pushedAt: null,
   merged: { total: 40, external: 20 },
   externalShare: 0.5,
@@ -187,6 +189,15 @@ describe("decide", () => {
     assert.equal(decide(input({ merge: merge({ archived: true }) })).verdict, "dont");
     assert.ok(codes(input({ viewer: { login: "me", openPRsInRepo: 0, prsLast24h: 9 } })).includes("pr-burst"));
     assert.ok(codes(input({ viewer: { login: "me", openPRsInRepo: 4, prsLast24h: 0 } })).includes("many-open-prs"));
+  });
+
+  it("stops when only collaborators can open PRs, unless you are one", () => {
+    const d = decide(input({ merge: merge({ prCreationPolicy: "collaborators-only" }) }));
+    assert.equal(d.verdict, "dont");
+    assert.ok(d.reasons.some((r) => r.code === "prs-collaborators-only"));
+    assert.ok(d.nextSteps.some((s) => /Open an issue/.test(s)));
+    assert.equal(decide(input({ merge: merge({ prCreationPolicy: "collaborators-only", viewerPermission: "WRITE" }) })).verdict, "go");
+    assert.equal(decide(input({ merge: merge({ prCreationPolicy: "collaborators-only", viewerPermission: null }) })).verdict, "dont");
   });
 
   it("never says go when a check failed", () => {
