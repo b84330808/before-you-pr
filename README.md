@@ -9,7 +9,7 @@ It splits the work between code and the model, each doing what it is good at:
 - **Code collects and judges the facts.** A bundled script asks GitHub for:
   - every PR that ever touched the issue (open, merged or closed), and why the closed ones were closed;
   - who has claimed the issue, and whether they are still active;
-  - labels, and how often outside PRs get merged;
+  - labels, how often outside PRs get merged, and whether outside PRs are allowed at all;
   - your own PR pace, and CLA/DCO bots.
 
   These are computed, not guessed.
@@ -101,6 +101,7 @@ It is deliberately conservative: it will tell you to slow down far more often th
    - The share of recently merged PRs that came from outside contributors (`CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `NONE`, and not anyone who merges PRs).
    - The median time to merge.
    - How many outside PRs were closed unmerged, compared as per-day rates because the two samples can cover different spans.
+   - Whether only collaborators may open PRs (GitHub's pull request creation setting). If so and you have no write or triage access, GitHub will refuse your PR.
 4. **Your own pace.** How many PRs you already have open in this repo, and how many you opened in the last 24 hours.
 
 ### How the verdict is reached
@@ -109,7 +110,7 @@ Each finding has a level, and the strictest one wins.
 
 | Verdict | Typical reasons |
 |---|---|
-| ⛔ **don't** | an open, linked PR (updated in the last 60 days); an active claim or assignment; the issue is closed or labelled `wontfix`/`duplicate`; the repo forbids AI-generated contributions and you use AI; the repo is archived; you already have a PR for it |
+| ⛔ **don't** | an open, linked PR (updated in the last 60 days); an active claim or assignment; the issue is closed or labelled `wontfix`/`duplicate`; the repo forbids AI-generated contributions and you use AI; the repo is archived; only collaborators can open PRs and you aren't one; you already have a PR for it |
 | 💬 **comment & claim first** | the repo requires assignment first; the open PR looks abandoned; a stale assignment; a PR only mentions the issue; someone pushed a commit for it recently; earlier PRs were closed for AI, process or "not wanted" reasons, or three or more were closed; `needs triage` labels; an untriaged feature request; outside PRs rarely get merged; you are opening PRs in a burst; a check failed |
 | ✅ **go** | none of the above. Run it again right before you open the PR, because someone may have opened one in the meantime. |
 

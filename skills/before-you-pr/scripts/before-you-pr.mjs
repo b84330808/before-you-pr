@@ -733,7 +733,7 @@ var DEFAULT_WINDOW_DAYS = 90;
 var MERGE_QUERY = `
 query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    isArchived stargazerCount pushedAt
+    isArchived stargazerCount pushedAt pullRequestCreationPolicy viewerPermission
     merged: pullRequests(states: MERGED, first: ${SAMPLE}, orderBy: { field: UPDATED_AT, direction: DESC }) {
       nodes {
         createdAt updatedAt mergedAt authorAssociation author { __typename login } mergedBy { login }
@@ -789,6 +789,8 @@ async function checkMergeFriendliness(client, repo, options = {}) {
     windowDays: Math.round(days(mergedStart)),
     stars: r.stargazerCount,
     archived: r.isArchived,
+    prCreationPolicy: r.pullRequestCreationPolicy === "COLLABORATORS_ONLY" ? "collaborators-only" : "all",
+    viewerPermission: r.viewerPermission,
     pushedAt: r.pushedAt,
     merged: { total: merged.length, external: external.length },
     externalShare: merged.length ? external.length / merged.length : null,
@@ -1170,12 +1172,16 @@ function applyComplianceSignals(rules, sources, checkNames) {
 var STALE_PR_DAYS = 60;
 var MANY_OPEN_PRS_IN_REPO = 3;
 var MANY_PRS_PER_DAY = 5;
+var COLLABORATOR_PERMISSIONS = /* @__PURE__ */ new Set(["ADMIN", "MAINTAIN", "WRITE", "TRIAGE"]);
 var ORDER = { ok: 0, note: 1, ask: 2, stop: 3 };
 var prRef = (p) => `#${p.number}${p.author ? ` by @${p.author}` : ""}`;
 var ago = (days) => days === 0 ? "today" : days === 1 ? "1 day ago" : `${days} days ago`;
 function repoReasons(input, out) {
   const { rules, merge, viewer, usesAI } = input;
   if (merge?.archived) out.push({ level: "stop", code: "repo-archived", message: "The repository is archived; it does not accept changes." });
+  if (merge?.prCreationPolicy === "collaborators-only" && !COLLABORATOR_PERMISSIONS.has(merge.viewerPermission ?? "")) {
+    out.push({ level: "stop", code: "prs-collaborators-only", message: "Only collaborators can open pull requests in this repository, so GitHub will refuse a PR from you." });
+  }
   if (rules) {
     const ai = rules.ai;
     if (ai.policy === "forbidden") {
@@ -1382,7 +1388,8 @@ function nextSteps(verdict, input, reasons) {
   const steps = [];
   const codes = new Set(reasons.map((r) => r.code));
   if (verdict === "dont") {
-    if (codes.has("open-pr") || codes.has("your-open-pr")) steps.push("Review, test or comment on the existing PR instead of opening another one.");
+    if (codes.has("prs-collaborators-only")) steps.push("Open an issue with the details and your suggested fix instead of a PR.");
+    else if (codes.has("open-pr") || codes.has("your-open-pr")) steps.push("Review, test or comment on the existing PR instead of opening another one.");
     else if (codes.has("claimed") || codes.has("assigned")) steps.push("Leave this issue to the person working on it, or offer help in a comment. Pick another issue.");
     else steps.push("Do not open a PR for this. Pick another issue or another project.");
   } else if (verdict === "comment-first") {
@@ -1408,7 +1415,7 @@ var NAME = "before-you-pr";
 var VERSION = "0.1.0";
 
 // src/check.ts
-var AGENT_INSTRUCTIONS = `factsVerdict comes from GitHub data only: linked PRs, claims, labels, merges, the user's own pace, and CLA/DCO bots.
+var AGENT_INSTRUCTIONS = `factsVerdict comes from GitHub data only: linked PRs, claims, labels, merges, whether only collaborators can open PRs, the user's own pace, and CLA/DCO bots.
 The repo's written rules are not judged in it. Read every excerpt and decide, quoting file:line:
 1. the AI policy: forbidden, PR text must be human-written, disclosure required, allowed, or not stated; and whether agents may open PRs on their own;
 2. whether an issue must be assigned or claimed, or a change discussed, before a PR;

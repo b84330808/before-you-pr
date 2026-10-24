@@ -10,7 +10,7 @@ export const DEFAULT_WINDOW_DAYS = 90;
 const MERGE_QUERY = `
 query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    isArchived stargazerCount pushedAt
+    isArchived stargazerCount pushedAt pullRequestCreationPolicy viewerPermission
     merged: pullRequests(states: MERGED, first: ${SAMPLE}, orderBy: { field: UPDATED_AT, direction: DESC }) {
       nodes {
         createdAt updatedAt mergedAt authorAssociation author { __typename login } mergedBy { login }
@@ -37,6 +37,8 @@ interface MergeData {
     isArchived: boolean;
     stargazerCount: number;
     pushedAt: string | null;
+    pullRequestCreationPolicy: string | null;
+    viewerPermission: string | null;
     merged: {
       nodes: {
         createdAt: string;
@@ -107,6 +109,8 @@ export async function checkMergeFriendliness(
     windowDays: Math.round(days(mergedStart)),
     stars: r.stargazerCount,
     archived: r.isArchived,
+    prCreationPolicy: r.pullRequestCreationPolicy === "COLLABORATORS_ONLY" ? "collaborators-only" : "all",
+    viewerPermission: r.viewerPermission,
     pushedAt: r.pushedAt,
     merged: { total: merged.length, external: external.length },
     externalShare: merged.length ? external.length / merged.length : null,

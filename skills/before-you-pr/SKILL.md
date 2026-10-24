@@ -24,7 +24,7 @@ The JSON has these fields:
 
 | Field | What it is | How much to trust it |
 |---|---|---|
-| `factsVerdict`, `factsReasons` | verdict from GitHub data only: linked PRs, claims and assignments, labels, outside-contributor merge rate, the user's own PR pace, CLA/DCO bots | Trust it. It is computed, not guessed. |
+| `factsVerdict`, `factsReasons` | verdict from GitHub data only: linked PRs, claims and assignments, labels, outside-contributor merge rate, whether only collaborators can open PRs, the user's own PR pace, CLA/DCO bots | Trust it. It is computed, not guessed. |
 | `excerpts` | passages from the repo's CONTRIBUTING, AI-policy, AGENTS.md/CLAUDE.md and PR-template files, with `file`, `url` and line numbers | You judge these (step 2). |
 | `keywordHints` | what a keyword scan made of those same files | Hints only. They can be wrong. The text wins. |
 | `sources` | every rule file that was read, with URLs | Open one if the excerpts look incomplete. |
